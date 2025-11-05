@@ -29,7 +29,7 @@ export function ConsentForm() {
     setStep(2);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.aceptaTerminos) {
       toast.error('Debe aceptar los términos y condiciones');
       return;
@@ -39,11 +39,33 @@ export function ConsentForm() {
       return;
     }
     
-    // Aquí se enviaría la información al backend
-    console.log('Formulario enviado:', formData);
-    setSubmitted(true);
-    toast.success('Consentimiento registrado exitosamente');
+    // Aquí se envía la información al backend
+    try {
+        // Aquí reemplazamos el comentario por este fetch
+        const res = await fetch('/api/consent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: formData.nombre,
+            rutEmpresa: formData.rut,   // o como se llame tu campo
+            email: formData.email,
+            aceptaTerminos: formData.aceptaTerminos,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          toast.error(data.error || 'No se pudo registrar el consentimiento');
+          return;
+        }
+
+        setSubmitted(true);
+        toast.success('Consentimiento registrado exitosamente');
+      } catch (err) {
+        toast.error('Error de red o de servidor');
+      }
   };
+
 
   if (submitted) {
     return (
