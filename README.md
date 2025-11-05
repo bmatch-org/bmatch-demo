@@ -9,3 +9,8 @@
 
   Run `npm run dev` to start the development server.
   
+  ## Cuando se realicen cambios y se quieran pushear al git
+git status
+git add .
+git commit -m "Descripción del cambio"
+git push
