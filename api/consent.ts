@@ -1,25 +1,83 @@
 // api/consent.ts
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
-
-export const config = { runtime: 'edge' };
 
 type Payload = {
   nombre: string;
   rutEmpresa: string;
   email: string;
-  aceptaTerminos?: boolean;
+  aceptaTerminos: boolean;
 };
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
+  }
+
+  const body = typeof req.body === 'string' ? safeJSON(req.body) : req.body || {};
+  const { nombre = '', rutEmpresa = '', email = '', aceptaTerminos = false } = body as Payload;
+
+  if (!aceptaTerminos) {
+    return res.status(400).json({ ok: false, error: 'Debe aceptar los términos.' });
+  }
+  if (!nombre.trim() || !rutEmpresa.trim() || !email.trim()) {
+    return res.status(400).json({ ok: false, error: 'Faltan campos obligatorios.' });
+  }
+  if (!validarEmail(email)) {
+    return res.status(400).json({ ok: false, error: 'Email inválido.' });
+  }
+  if (!validarRut(rutEmpresa)) {
+    return res.status(400).json({ ok: false, error: 'RUT inválido.' });
+  }
+
+  const record = {
+    nombre: nombre.trim(),
+    rutEmpresa: normalizarRut(rutEmpresa.trim()),
+    email: email.trim(),
+    aceptaTerminos: true,
+    acceptedAt: new Date().toISOString(),
+    ip: getIp(req),
+    userAgent: (req.headers['user-agent'] as string) || '',
+  };
+
+  try {
+    const filename = `submissions/${Date.now()}.json`;
+    const result = await put(filename, JSON.stringify(record), {
+      access: 'private',
+      contentType: 'application/json',
+      addRandomSuffix: true,
+    });
+    return res.status(201).json({ ok: true, id: result.pathname });
+  } catch {
+    return res.status(500).json({ ok: false, error: 'Error guardando el consentimiento.' });
+  }
+}
+
+/* ===== Helpers ===== */
+function safeJSON(s?: string) {
+  try {
+    return s ? JSON.parse(s) : {};
+  } catch {
+    return {};
+  }
+}
+
+function getIp(req: VercelRequest) {
+  const xf = (req.headers['x-forwarded-for'] as string) || '';
+  return xf.split(',')[0].trim() || (req.socket?.remoteAddress || '') || '';
+}
 
 function validarEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// Normaliza RUT (empresa) y valida DV
 function normalizarRut(rut: string) {
   return rut.replace(/\./g, '').replace(/-/g, '').toUpperCase();
 }
+
 function dvRut(num: string) {
-  let suma = 0, mul = 2;
+  let suma = 0,
+    mul = 2;
   for (let i = num.length - 1; i >= 0; i--) {
     suma += parseInt(num[i], 10) * mul;
     mul = mul === 7 ? 2 : mul + 1;
@@ -29,6 +87,7 @@ function dvRut(num: string) {
   if (res === 10) return 'K';
   return String(res);
 }
+
 function validarRut(rut: string) {
   const r = normalizarRut(rut);
   if (r.length < 2) return false;
@@ -36,56 +95,4 @@ function validarRut(rut: string) {
   const dv = r.slice(-1);
   if (!/^\d+$/.test(cuerpo)) return false;
   return dvRut(cuerpo) === dv;
-}
-
-export async function POST(req: Request) {
-  try {
-    const ip =
-      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      req.headers.get('x-real-ip') ||
-      '0.0.0.0';
-    const ua = req.headers.get('user-agent') || '';
-
-    const body = (await req.json()) as Partial<Payload>;
-    const nombre = (body.nombre || '').trim();
-    const rutEmpresa = (body.rutEmpresa || '').trim();
-    const email = (body.email || '').trim();
-    const acepta = !!body.aceptaTerminos;
-
-    if (!acepta) {
-      return new Response(JSON.stringify({ ok: false, error: 'Debe aceptar términos.' }), { status: 400 });
-    }
-    if (!nombre || !rutEmpresa || !email) {
-      return new Response(JSON.stringify({ ok: false, error: 'Faltan campos.' }), { status: 400 });
-    }
-    if (!validarEmail(email)) {
-      return new Response(JSON.stringify({ ok: false, error: 'Email inválido.' }), { status: 400 });
-    }
-    if (!validarRut(rutEmpresa)) {
-      return new Response(JSON.stringify({ ok: false, error: 'RUT inválido.' }), { status: 400 });
-    }
-
-    const now = new Date().toISOString();
-    const filename = `submissions/${Date.now()}.json`;
-
-    const record = {
-      nombre,
-      rutEmpresa: normalizarRut(rutEmpresa),
-      email,
-      aceptaTerminos: true,
-      acceptedAt: now,
-      ip,
-      userAgent: ua,
-    };
-
-    const result = await put(filename, JSON.stringify(record), {
-      access: 'private',
-      contentType: 'application/json',
-      addRandomSuffix: true,
-    });
-
-    return new Response(JSON.stringify({ ok: true, id: result.pathname }), { status: 201 });
-  } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: 'Error de servidor.' }), { status: 500 });
-  }
 }
