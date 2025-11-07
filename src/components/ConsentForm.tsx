@@ -64,9 +64,14 @@ export function ConsentForm() {
           }),
         });
 
-        const data = await res.json();
-        if (!res.ok || !data.ok) {
-          toast.error(data.error || 'No se pudo registrar el consentimiento');
+        //const data = await res.json();
+        const raw = await res.text();
+
+        let data: any = null;
+        try { data = JSON.parse(raw); } catch {}
+
+        if (!res.ok || !data?.ok) {
+          toast.error(data?.error || 'No se pudo registrar el consentimiento');
           return;
         }
 

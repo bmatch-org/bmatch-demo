@@ -42,14 +42,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const filename = `submissions/${Date.now()}.json`;
+
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) {
+      console.error('[consent] Falta BLOB_READ_WRITE_TOKEN');
+      return res.status(500).json({ ok: false, error: 'Falta BLOB_READ_WRITE_TOKEN' });
+    }
+    
     const result = await put(filename, JSON.stringify(record), {
       access: 'private',
       contentType: 'application/json',
       addRandomSuffix: true,
     });
     return res.status(201).json({ ok: true, id: result.pathname });
-  } catch {
-    return res.status(500).json({ ok: false, error: 'Error guardando el consentimiento.' });
+  } catch (e: any){
+    console.error('[consent] put() error:', e?.message || e);
+    return res.status(500).json({ ok: false, error: e?.message || 'Fallo en put()' });
   }
 }
 
