@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     const result = await put(filename, JSON.stringify(record), {
-      access: 'private',
+      access: 'public',
       contentType: 'application/json',
       addRandomSuffix: true,
     });
